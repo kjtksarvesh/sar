@@ -11,6 +11,7 @@ android.permissions = INTERNET, RECORD_AUDIO, WRITE_EXTERNAL_STORAGE, READ_EXTER
 android.api = 31
 android.minapi = 21
 android.ndk = 23b
+android.ndk_flags = -Wno-macro-redefined
 android.ndk_path = /root/.buildozer/android/platform/android-ndk-r23b
 android.sdk_path = /root/.buildozer/android/platform/android-sdk
 p4a.branch = master
