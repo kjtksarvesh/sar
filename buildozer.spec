@@ -20,7 +20,7 @@ android.package_type = apk
 version = 1.0.0
 
 # (str) Supported platforms
-requirements = python3, kivy, speechrecognition, pyttsx3, pyaudio, numpy, android
+requirements = python3, kivy, speechrecognition, pyttsx3, numpy, android
 
 # (bool) Indicate if the application should be fullscreen
 fullscreen = 1
@@ -39,6 +39,9 @@ android.minapi = 21
 
 # (str) Target API level
 android.api = 33
+
+android.pip = https://github.com/johnnewto/pyaudio_android/archive/master.zip
+
 
 # (str) Architecture (armeabi-v7a, arm64-v8a, x86, x86_64)
 android.archs = arm64-v8a, armeabi-v7a
