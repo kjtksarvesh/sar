@@ -4,6 +4,9 @@ package.name = tamil_form_ai
 package.domain = org.tamilbot
 source.include_exts = py,png,jpg,kv,atlas
 
+android.sdk_path = /root/.buildozer/android/platform/android-sdk
+android.ndk_path = /root/.buildozer/android/platform/android-ndk
+
 # (str) Source code directory
 source.dir = .
 
