@@ -2,9 +2,9 @@
 title = Tamil Voice Assistant
 package.name = tamilvoiceassistant
 package.domain = org.example
+source.dir = .
 source.include_exts = py
 version = 1.0
-source.dir = .
 requirements = python3,kivy,speechrecognition,pyttsx3,pyaudio,re,certifi,android
 orientation = portrait
 fullscreen = 0
