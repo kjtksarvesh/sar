@@ -3,7 +3,7 @@ title = Tamil Form Fill AI
 package.name = tamil_form_ai
 package.domain = org.tamilbot
 source.include_exts = py,png,jpg,kv,atlas
-
+python = 3.9
 android.sdk_path = /root/.buildozer/android/platform/android-sdk
 android.ndk_path = /root/.buildozer/android/platform/android-ndk
 
