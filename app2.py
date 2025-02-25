@@ -2,194 +2,172 @@ import kivy
 from kivy.app import App
 from kivy.uix.button import Button
 from kivy.uix.label import Label
-from kivy.uix.textinput import TextInput
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.scrollview import ScrollView
-from kivy.uix.image import Image
+from kivy.uix.textinput import TextInput
+from kivy.core.text import LabelBase
+from kivy.core.window import Window
+from kivy.animation import Animation
+import asyncio
+import edge_tts
+import playsound
 import speech_recognition as sr
-import pyttsx3
-import re
 import csv
+import os
+import re
 
-kivy.require('1.11.1')  # specify the Kivy version
+kivy.require('2.0.0')
 
-# Speech-to-Text engine (Text-to-Speech)
-engine = pyttsx3.init()
-engine.setProperty('rate', 150)  # speed
-engine.setProperty('volume', 1)  # Volume (0.0 to 1.0)
+# ---------------------------
+# 🔹 Register Tamil Font
+# ---------------------------
+FONT_PATH = "C:\\Users\\vnrth\\Downloads\\NotoSansTamil-VariableFont_wdth,wght.ttf"
+if os.path.exists(FONT_PATH):
+    LabelBase.register(name="TamilFont", fn_regular=FONT_PATH)
+else:
+    print("⚠ Tamil Font Not Found!")
 
-def speak(text):
-    engine.say(text)
-    engine.runAndWait()
+# ---------------------------
+# 🔹 Language Selection
+# ---------------------------
+LANGUAGES = {"Tamil": "ta-IN", "English": "en-US"}
+selected_language = "Tamil"
 
-# Speech Recognition (Tamil)
-recognizer = sr.Recognizer()
+def set_language(lang):
+    global selected_language
+    selected_language = lang
 
-def listen_to_user():
-    with sr.Microphone() as source:
-        print("தயவுசெய்து பேசவும்...")
-        try:
-            audio = recognizer.listen(source, timeout=5)  # Timeout for better UX
-            text = recognizer.recognize_google(audio, language="ta-IN")
-            print(f"நீங்கள் சொன்னது: {text}")
-            return text
-        except (sr.UnknownValueError, sr.RequestError):
-            speak("மன்னிக்கவும், உங்கள் பதில் புரியவில்லை. மீண்டும் சொல்லவும்.")
-            return ""
-        
-        try:
-            # Tamil speech-to-text
-            text = recognizer.recognize_google(audio, language="ta-IN")  # Tamil language
-            print(f"நீங்கள் சொன்னது: {text}")
-            return text
-        except sr.UnknownValueError:
-            speak("மன்னிக்கவும், நான் அதைப் புரிந்துகொள்ள முடியவில்லை.")
-        except sr.RequestError:
-            speak("மன்னிக்கவும், பேச்சு பொழிப்புத் தொலைபேசி சேவையில் பிரச்சினை உள்ளது.")
-        return ""
+# ---------------------------
+# 🔹 TTS: Convert text to speech
+# ---------------------------
+async def speak_text(text):
+    if os.path.exists("output.mp3"):
+        os.remove("output.mp3")
+    tts = edge_tts.Communicate(text, voice="ta-IN-ValluvarNeural" if selected_language == "Tamil" else "en-US-JennyNeural")
+    await tts.save("output.mp3")
+    playsound.playsound("output.mp3")
 
-# Regular expressions for validation (Phone, Email, etc.)
-def validate_phone_number(phone):
-    pattern = r"^[6-9]\d{9}$"  # Indian phone number format (6-9 and 9 digits)
-    return re.match(pattern, phone)
+def speak(prompt):
+    asyncio.run(speak_text(prompt))
 
-def validate_email(email):
-    pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
-    return re.match(pattern, email)
+# ---------------------------
+# 🔹 Speech Recognition
+# ---------------------------
+def listen(prompt):
+    speak(prompt)
+    r = sr.Recognizer()
+    with sr.Microphone(device_index=0) as source:
+        r.adjust_for_ambient_noise(source, duration=1)
+        while True:
+            try:
+                audio = r.listen(source, timeout=5, phrase_time_limit=8)
+                text = r.recognize_google(audio, language=LANGUAGES[selected_language])
+                return text
+            except sr.UnknownValueError:
+                speak("மன்னிக்கவும், நான் புரிந்துகொள்ளவில்லை. மீண்டும் சொல்லவும்." if selected_language == "Tamil" else "Sorry, I didn't catch that. Please say it again.")
+            except sr.RequestError:
+                speak("சேவையகத்துடன் தொடர்பு கொள்ள முடியவில்லை." if selected_language == "Tamil" else "Unable to reach the service.")
+            except Exception as e:
+                print("Speech recognition error:", e)
+                return ""
 
-def validate_age(age):
-    return age.isdigit() and 0 < int(age) <= 120
+# ---------------------------
+# 🔹 Regular Expressions for Validation
+# ---------------------------
+FIELD_PATTERNS_TAMIL = {
+    "பெயர்": (r'^[\u0B80-\u0BFF\s]+$', "⚠️ பெயர் தவறாக உள்ளது. மீண்டும் சொல்லவும்."),
+    "வயது": (r'^\d{1,3}$', "⚠️ வயது 1 முதல் 3 இலக்கங்கள் வரை இருக்க வேண்டும்."),
+    "பாலினம்": (r'^(ஆண்|பெண்|பிற)$', "⚠️ பாலினம் 'ஆண்', 'பெண்' அல்லது 'பிற' ஆக இருக்க வேண்டும்."),
+    "முகவரி": (r'^[\u0B80-\u0BFF\s,0-9]+$', "⚠️ முகவரி தவறாக உள்ளது. சரியாக உள்ளிடவும்."),
+    "தொலைபேசி": (r'^\d{10}$', "⚠️ தொலைபேசி எண் 10 இலக்கங்கள் இருக்க வேண்டும்."),
+    "மின்னஞ்சல்": (r'^[\w\.-]+@[\w\.-]+\.\w{2,3}$', "⚠️ சரியான மின்னஞ்சல் (example@mail.com) வழங்கவும்.")
+}
 
-# Function to save data to a CSV file
-def save_to_csv(data):
-    header = ["பெயர்", "மின்னஞ்சல்", "தொலைபேசி எண்", "முகவரி", "பாலினம்", "வயது", "தொழில்", "பிறந்த தேதி", "நகரம்", "நாடு"]
+FIELD_PATTERNS_ENGLISH = {
+    "Name": (r'^[A-Za-z\s]+$', "Invalid name! Please try again."),
+    "Age": (r'^\d{1,3}$', "Invalid age! Please enter 1 to 3 digits."),
+    "Gender": (r'^(male|female|other)$', "Invalid gender! Choose Male, Female, or Other."),
+    "Address": (r'^[A-Za-z0-9\s,]+$', "Invalid address! Please enter a valid address."),
+    "Phone": (r'^\d{10}$', "Invalid phone number! Enter a 10-digit number."),
+    "Email": (r'^[\w\.-]+@[\w\.-]+\.\w{2,3}$', "Invalid email! Enter a valid email address.")
+}
+
+def get_field_input(field_name):
+    field_patterns = FIELD_PATTERNS_TAMIL if selected_language == "Tamil" else FIELD_PATTERNS_ENGLISH
+    pattern, warning_message = field_patterns[field_name]
     
-    # Open the CSV file in append mode, so that it adds to the file without overwriting.
-    with open("form_data.csv", "a", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
+    while True:
+        # Listen for the input
+        user_input = listen(f"{field_name} சொல்லவும்:" if selected_language == "Tamil" else f"Please say your {field_name}.")
         
-        # If file is empty, write the header
-        if file.tell() == 0:
-            writer.writerow(header)
+        # Normalize the input for case insensitivity and stripping extra spaces
+        normalized_input = user_input.strip().lower()
         
-        # Write the data as a row in the CSV
+        if re.match(pattern, normalized_input):
+            return user_input
+        else:
+            speak(warning_message)
+
+# ---------------------------
+# 🔹 Save Form Data to CSV
+# ---------------------------
+def save_to_csv(data, filename="form_data.csv"):
+    file_exists = os.path.isfile(filename)
+    with open(filename, mode="a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=data.keys())
+        if not file_exists:
+            writer.writeheader()
         writer.writerow(data)
-    speak("உங்கள் தகவல்கள் வெற்றிகரமாக சேமிக்கப்பட்டுள்ளன.")
 
-# Kivy App for Form Filling with Enhanced UI
-class TamilFormFillApp(App):
+# ---------------------------
+# 🔹 Kivy App
+# ---------------------------
+class VoiceAssistantApp(App):
     def build(self):
-        self.title = "தமிழ் படிவம் பூர்த்தி செய்யுங்கள்"
+        Window.clearcolor = (1, 1, 1, 1)
+        layout = BoxLayout(orientation='vertical', spacing=20, padding=40)
         
-        # Create the root layout for the app
-        root_layout = BoxLayout(orientation='vertical', padding=20, spacing=20)
+        # Title Label
+        self.title_label = Label(text="Voice Assistant", font_size=30, bold=True, color=(0, 0, 0, 1))
+        layout.add_widget(self.title_label)
+        
+        # Language Buttons
+        self.tamil_button = Button(text="தமிழ்", font_size=20, on_press=lambda x: set_language("Tamil"))
+        self.english_button = Button(text="English", font_size=20, on_press=lambda x: set_language("English"))
+        layout.add_widget(self.tamil_button)
+        layout.add_widget(self.english_button)
+        
+        # Microphone Button
+        self.mic_button = Button(text="🎤", font_size=50, size_hint=(None, None), size=(120, 120), background_color=(0.2, 0.6, 1, 1))
+        self.mic_button.bind(on_press=self.start_session)
+        layout.add_widget(self.mic_button)
+        
+        # Response Label (Fading Text)
+        self.response_label = Label(text="", font_size=20, color=(0, 0, 0, 1))
+        layout.add_widget(self.response_label)
+        
+        return layout
 
-        # Add an image/logo to the header
-        header_layout = BoxLayout(size_hint_y=None, height=200)
-        img = Image(source='your_logo.png')  # Replace 'your_logo.png' with your image path
-        header_layout.add_widget(img)
-        root_layout.add_widget(header_layout)
+    def start_session(self, instance):
+        self.fade_text("உங்கள் தகவல்களை சொல்லுங்கள்." if selected_language == "Tamil" else "Please provide your details.")
+        
+        field_patterns = FIELD_PATTERNS_TAMIL if selected_language == "Tamil" else FIELD_PATTERNS_ENGLISH
+        
+        # Collecting data for each field
+        form_data = {}
+        for field in field_patterns.keys():
+            field_input = get_field_input(field)
+            form_data[field] = field_input
+        
+        self.fade_text("உங்கள் தகவல்கள் சேமிக்கப்பட்டன!" if selected_language == "Tamil" else "Your details have been saved!")
+        save_to_csv(form_data)
+        
+    def fade_text(self, text):
+        # Fading in and out animation for response text
+        self.response_label.text = text
+        anim_in = Animation(opacity=1, duration=1)
+        anim_out = Animation(opacity=0, duration=1)
+        anim_in.start(self.response_label)
+        anim_out.start(self.response_label)
 
-        # Scrollable content area
-        scroll_view = ScrollView()
-        form_layout = GridLayout(cols=1, padding=10, spacing=15, size_hint_y=None)
-        form_layout.bind(minimum_height=form_layout.setter('height'))
-        
-        # Labels and TextInputs for the form fields with custom styling
-        self.name_input = TextInput(hint_text="பெயர்", multiline=False, size_hint_y=None, height=40, font_size=18)
-        self.email_input = TextInput(hint_text="மின்னஞ்சல்", multiline=False, size_hint_y=None, height=40, font_size=18)
-        self.phone_input = TextInput(hint_text="தொலைபேசி எண்", multiline=False, size_hint_y=None, height=40, font_size=18)
-        self.address_input = TextInput(hint_text="முகவரி", multiline=False, size_hint_y=None, height=40, font_size=18)
-        self.gender_input = TextInput(hint_text="பாலினம்", multiline=False, size_hint_y=None, height=40, font_size=18)
-        self.age_input = TextInput(hint_text="வயது", multiline=False, size_hint_y=None, height=40, font_size=18)
-        self.occupation_input = TextInput(hint_text="தொழில்", multiline=False, size_hint_y=None, height=40, font_size=18)
-        self.dob_input = TextInput(hint_text="பிறந்த தேதி", multiline=False, size_hint_y=None, height=40, font_size=18)
-        self.city_input = TextInput(hint_text="நகரம்", multiline=False, size_hint_y=None, height=40, font_size=18)
-        self.country_input = TextInput(hint_text="நாடு", multiline=False, size_hint_y=None, height=40, font_size=18)
-        
-        # Add all inputs to the layout
-        form_layout.add_widget(self.name_input)
-        form_layout.add_widget(self.email_input)
-        form_layout.add_widget(self.phone_input)
-        form_layout.add_widget(self.address_input)
-        form_layout.add_widget(self.gender_input)
-        form_layout.add_widget(self.age_input)
-        form_layout.add_widget(self.occupation_input)
-        form_layout.add_widget(self.dob_input)
-        form_layout.add_widget(self.city_input)
-        form_layout.add_widget(self.country_input)
-
-        # Add ScrollView to the root layout
-        scroll_view.add_widget(form_layout)
-        root_layout.add_widget(scroll_view)
-
-        # Button to start form filling
-        self.fill_button = Button(text="பフォーム பூர்த்தி செய்யவும்", size_hint_y=None, height=50, font_size=20, background_color=(0.2, 0.6, 0.2, 1))
-        self.fill_button.bind(on_press=self.fill_form)
-
-        # Add button to root layout
-        root_layout.add_widget(self.fill_button)
-
-        return root_layout
-    
-    # Function to start the form filling process
-    def fill_form(self, instance):
-        speak("உங்கள் பெயர் என்ன?")
-        name = listen_to_user()
-        self.name_input.text = name  # Set the name in the text input field
-        
-        speak("தயவுசெய்து உங்கள் மின்னஞ்சல் சொல்க.")
-        email = listen_to_user()
-        while not validate_email(email):
-            speak("மின்னஞ்சல் வடிவம் தவறாக உள்ளது. மீண்டும் உங்கள் மின்னஞ்சலை சொல்லவும்.")
-            email = listen_to_user()
-        self.email_input.text = email  # Set the email in the text input field
-        
-        speak("தயவுசெய்து உங்கள் தொலைபேசி எண்ணை சொல்லவும்.")
-        phone = listen_to_user()
-        while not validate_phone_number(phone):
-            speak("தொலைபேசி எண் தவறாக உள்ளது. மீண்டும் உங்கள் தொலைபேசி எண்ணை சொல்லவும்.")
-            phone = listen_to_user()
-        self.phone_input.text = phone  # Set the phone number in the text input field
-        
-        speak("தயவுசெய்து உங்கள் முகவரியை சொல்லவும்.")
-        address = listen_to_user()
-        self.address_input.text = address  # Set the address in the text input field
-        
-        speak("உங்கள் பாலினம் என்ன? (ஆண்/பெண்/மற்றது)")
-        gender = listen_to_user()
-        self.gender_input.text = gender  # Set the gender in the text input field
-        
-        speak("உங்கள் வயது எவ்வளவு?")
-        age = listen_to_user()
-        while not validate_age(age):
-            speak("வயது தவறாக உள்ளது. தயவுசெய்து சரியான வயதை சொல்லவும்.")
-            age = listen_to_user()
-        self.age_input.text = age  # Set the age in the text input field
-        
-        speak("உங்கள் தொழில் என்ன?")
-        occupation = listen_to_user()
-        self.occupation_input.text = occupation  # Set the occupation in the text input field
-        
-        speak("உங்கள் பிறந்த தேதி என்ன? (DD/MM/YYYY வடிவத்தில்)")
-        dob = listen_to_user()
-        self.dob_input.text = dob  # Set the date of birth in the text input field
-        
-        speak("உங்கள் நகரம் என்ன?")
-        city = listen_to_user()
-        self.city_input.text = city  # Set the city in the text input field
-        
-        speak("உங்கள் நாடு என்ன?")
-        country = listen_to_user()
-        self.country_input.text = country  # Set the country in the text input field
-
-        # Prepare the data as a list
-        form_data = [name, email, phone, address, gender, age, occupation, dob, city,country]
-    save_to_csv(form_data)
-        
-    speak(f"உங்கள் தகவல்கள் பூர்த்தி செய்யப்பட்டுள்ளன:\nபெயர்: {name}\nமின்னஞ்சல்: {email}\nதொலைபேசி எண்: {phone}\nமுகவரி: {address}\nபாலினம்: {gender}\nவயது: {age}\nதொழில்: {occupation}\nபிறந்த தேதி: {dob}\nநகரம்: {city}\nநாடு: {country}")
-
-# Run the app
-if __name__ == "__main__":
-    TamilFormFillApp().run()
+if __name__ == '__main__':
+    VoiceAssistantApp().run()
